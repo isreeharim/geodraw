@@ -5,8 +5,15 @@ export const metadata: Metadata = {
   title: "GeoDraw — Animated Route Replays & Video Export",
   description:
     "Turn real-world journeys into animated route replays, high-resolution shareable cards, and short video reels.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "GeoDraw",
+  },
+  manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 
@@ -15,6 +22,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
   themeColor: "#090d16",
 };
 

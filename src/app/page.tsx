@@ -226,27 +226,27 @@ export default function Home() {
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans">
       {/* 1. TOP NAVBAR */}
-      <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-4 pointer-events-none">
+      <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between pt-safe px-2.5 sm:px-4 pb-2 pointer-events-none">
         {/* Brand */}
-        <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-rose-500/20">
-            <Navigation2 className="w-4 h-4 fill-white -rotate-45" />
+        <div className="pointer-events-auto flex items-center gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-slate-900/95 backdrop-blur-xl border border-slate-800/80 rounded-2xl shadow-xl">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center text-white shadow-md shadow-rose-500/20 flex-shrink-0">
+            <Navigation2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white -rotate-45" />
           </div>
           <div>
-            <h1 className="font-extrabold text-sm tracking-tight text-white flex items-center gap-1.5">
+            <h1 className="font-extrabold text-xs sm:text-sm tracking-tight text-white flex items-center gap-1">
               GeoDraw
-              <span className="text-[10px] uppercase font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.2 rounded">
+              <span className="text-[9px] uppercase font-bold text-rose-400 bg-rose-500/10 px-1 py-0.2 rounded">
                 v2
               </span>
             </h1>
-            <p className="text-[10px] text-slate-400 font-medium truncate max-w-[140px] sm:max-w-xs">
+            <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium truncate max-w-[100px] sm:max-w-xs">
               {activeJourney.title}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
           {/* Hidden GPX File Input */}
           <input
             type="file"
@@ -357,7 +357,7 @@ export default function Home() {
       {/* 4. FLOATING PANELS */}
       {/* Style & Vehicle Selector */}
       {showStylePicker && (
-        <div className="absolute top-20 right-4 z-30 max-w-xs w-full animate-in fade-in duration-150">
+        <div className="absolute top-16 sm:top-20 right-2 sm:right-4 z-30 max-w-[280px] sm:max-w-xs w-full animate-in fade-in duration-150">
           <StylePicker
             currentMapStyle={mapStyle}
             currentRouteStyle={routeStyle}
@@ -371,7 +371,7 @@ export default function Home() {
 
       {/* Live Recorder HUD */}
       {showRecorderOverlay && (
-        <div className="absolute top-20 left-4 z-30 animate-in fade-in duration-150">
+        <div className="absolute top-16 sm:top-20 left-2 sm:left-4 right-2 sm:right-auto z-30 animate-in fade-in duration-150">
           <RecorderOverlay
             onFinishedJourney={() => {
               if (recorderStore.currentJourney) {
@@ -387,7 +387,7 @@ export default function Home() {
       )}
 
       {/* 5. BOTTOM REPLAY CONTROLLER */}
-      <footer className="absolute bottom-6 left-0 right-0 z-30 px-4 pointer-events-none flex justify-center">
+      <footer className="absolute bottom-2 sm:bottom-6 left-0 right-0 z-30 pb-safe px-2.5 sm:px-4 pointer-events-none flex justify-center">
         <div className="w-full max-w-2xl pointer-events-auto">
           <ReplayControls
             isPlaying={isPlaying}

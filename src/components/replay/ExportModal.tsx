@@ -68,8 +68,10 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 text-white flex flex-col gap-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg bg-slate-900 border-t sm:border border-slate-800 rounded-t-[32px] sm:rounded-3xl shadow-2xl p-5 sm:p-6 text-white flex flex-col gap-4 sm:gap-6 max-h-[90dvh] overflow-y-auto pb-safe">
+        {/* Mobile drag handle */}
+        <div className="w-12 h-1 bg-slate-700/80 rounded-full mx-auto sm:hidden -mt-1 mb-0.5" />
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">

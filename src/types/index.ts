@@ -11,6 +11,15 @@ export type RecorderState =
   | 'FINISHING'
   | 'COMPLETED';
 
+export type LocationCoordsInput = {
+  latitude: number;
+  longitude: number;
+  altitude?: number | null;
+  accuracy?: number | null;
+  speed?: number | null;
+  heading?: number | null;
+};
+
 export type GPSPoint = {
   latitude: number;
   longitude: number;

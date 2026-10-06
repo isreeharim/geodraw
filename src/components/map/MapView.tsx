@@ -6,9 +6,14 @@ import {
   NavigationControl,
   AttributionControl,
   GeoJSONSource,
+  setWorkerUrl,
 } from 'maplibre-gl';
 import { CameraMode, GPSPoint, MapStyleId, RouteStyleId, VehicleType } from '@/types';
 import { MAP_STYLES, ROUTE_STYLES } from '@/lib/maps/styles';
+
+if (typeof window !== 'undefined') {
+  setWorkerUrl('/maplibre-gl-worker.mjs');
+}
 
 interface MapViewProps {
   mapStyle: MapStyleId;

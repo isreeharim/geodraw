@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GPSPoint, Journey, RecorderState, TravelMode, VehicleType } from '@/types';
+import { GPSPoint, Journey, LocationCoordsInput, RecorderState, TravelMode, VehicleType } from '@/types';
 import { db } from '@/lib/storage/db';
 import {
   calculateDistance,
@@ -23,13 +23,15 @@ interface RecorderStore {
   wakeLock: WakeLockSentinelType | null;
   watchId: number | null;
   errorMessage: string | null;
+  accuracyThreshold: number;
 
+  setAccuracyThreshold: (threshold: number) => void;
   startRecording: (mode?: TravelMode, vehicle?: VehicleType) => Promise<void>;
   pauseRecording: () => Promise<void>;
   resumeRecording: () => Promise<void>;
   finishRecording: () => Promise<Journey | null>;
   cancelRecording: () => Promise<void>;
-  addLocationPoint: (coords: GeolocationCoordinates, timestamp: number) => Promise<void>;
+  addLocationPoint: (coords: LocationCoordsInput, timestamp: number) => Promise<void>;
   recoverUnfinishedJourney: () => Promise<Journey | null>;
 }
 
@@ -44,6 +46,9 @@ export const useRecorderStore = create<RecorderStore>((set, get) => ({
   wakeLock: null,
   watchId: null,
   errorMessage: null,
+  accuracyThreshold: 50, // default 50m
+
+  setAccuracyThreshold: (threshold: number) => set({ accuracyThreshold: threshold }),
 
   startRecording: async (mode = 'walk', vehicle = 'walk') => {
     // Generate client-side UUID
@@ -127,24 +132,25 @@ export const useRecorderStore = create<RecorderStore>((set, get) => ({
     set({ state: 'RECORDING' });
   },
 
-  addLocationPoint: async (coords: GeolocationCoordinates, timestamp: number) => {
-    const { state, currentJourney, points, lastPoint, activeSegment } = get();
+  addLocationPoint: async (coords: LocationCoordsInput, timestamp: number) => {
+    const { state, currentJourney, points, lastPoint, activeSegment, accuracyThreshold } = get();
     if (state !== 'RECORDING' || !currentJourney) return;
 
     const newPoint: GPSPoint = {
       latitude: coords.latitude,
       longitude: coords.longitude,
-      altitude: coords.altitude,
-      accuracy: coords.accuracy,
-      speed: coords.speed,
-      heading: coords.heading,
+      altitude: coords.altitude ?? null,
+      accuracy: coords.accuracy ?? null,
+      speed: coords.speed ?? null,
+      heading: coords.heading ?? null,
       timestamp: timestamp,
       segment: activeSegment,
     };
 
-    // 1. Validation
-    const validation = validatePoint(newPoint, lastPoint, currentJourney.travel_mode);
+    // 1. Validation with configurable threshold
+    const validation = validatePoint(newPoint, lastPoint, currentJourney.travel_mode, accuracyThreshold);
     if (!validation.valid) {
+      set({ errorMessage: validation.reason });
       console.warn('GPS point rejected:', validation.reason);
       return;
     }
@@ -179,6 +185,7 @@ export const useRecorderStore = create<RecorderStore>((set, get) => ({
       lastPoint: newPoint,
       distanceMeters: newDistance,
       durationSeconds: durationSec,
+      errorMessage: null,
     });
   },
 

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "postinstall": "node -e \"const fs = require('fs'); if (fs.existsSync('node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs')) { fs.copyFileSync('node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs', 'public/maplibre-gl-worker.mjs'); fs.copyFileSync('node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs', 'public/maplibre-gl-shared.mjs'); }\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

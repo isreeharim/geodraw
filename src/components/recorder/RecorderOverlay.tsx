@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRecorderStore } from '@/features/location/recorderStore';
 import { TravelMode, VehicleType } from '@/types';
-import { Play, Pause, Square, Circle, ShieldCheck } from 'lucide-react';
+import { Play, Pause, Square, Circle, ShieldCheck, AlertCircle, Compass } from 'lucide-react';
 
 interface RecorderOverlayProps {
   onFinishedJourney?: () => void;
@@ -17,6 +17,9 @@ export function RecorderOverlay({ onFinishedJourney, onClose }: RecorderOverlayP
     distanceMeters,
     durationSeconds,
     lastPoint,
+    errorMessage,
+    accuracyThreshold,
+    setAccuracyThreshold,
     startRecording,
     pauseRecording,
     resumeRecording,
@@ -24,6 +27,8 @@ export function RecorderOverlay({ onFinishedJourney, onClose }: RecorderOverlayP
     cancelRecording,
     addLocationPoint,
   } = useRecorderStore();
+
+  const [simulating, setSimulating] = useState(false);
 
   // Manage watchPosition lifecycle while recording
   useEffect(() => {
@@ -52,6 +57,26 @@ export function RecorderOverlay({ onFinishedJourney, onClose }: RecorderOverlayP
       navigator.geolocation.clearWatch(watchId);
     };
   }, [state, addLocationPoint]);
+
+  // Simulated GPS movement for desktop / laptop testing
+  const handleSimulateStep = () => {
+    setSimulating(true);
+    const baseLat = lastPoint ? lastPoint.latitude : 37.7749;
+    const baseLng = lastPoint ? lastPoint.longitude : -122.4194;
+    const step = 0.0005; // ~55m step
+
+    const simulatedCoords = {
+      latitude: baseLat + step,
+      longitude: baseLng + step * 0.8,
+      altitude: 10,
+      accuracy: 5, // High accuracy simulated GPS
+      heading: 45,
+      speed: 2.5,
+    };
+
+    addLocationPoint(simulatedCoords, Date.now());
+    setTimeout(() => setSimulating(false), 500);
+  };
 
   const handleStart = async (mode: TravelMode, vehicle: VehicleType) => {
     await startRecording(mode, vehicle);
@@ -114,7 +139,7 @@ export function RecorderOverlay({ onFinishedJourney, onClose }: RecorderOverlayP
   }
 
   return (
-    <div className="bg-slate-900/95 border border-slate-800 rounded-3xl p-5 shadow-2xl text-white max-w-sm w-full mx-auto flex flex-col gap-4 backdrop-blur-md">
+    <div className="bg-slate-900/95 border border-slate-800 rounded-3xl p-5 shadow-2xl text-white max-w-sm w-full mx-auto flex flex-col gap-3.5 backdrop-blur-md">
       {/* Top Status & Wake Lock indicator */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -158,6 +183,47 @@ export function RecorderOverlay({ onFinishedJourney, onClose }: RecorderOverlayP
         {lastPoint?.accuracy && (
           <span>Accuracy: ±{Math.round(lastPoint.accuracy)}m</span>
         )}
+      </div>
+
+      {/* Accuracy Warning / Desktop Wi-Fi Helper Banner */}
+      {errorMessage && (
+        <div className="bg-amber-950/70 border border-amber-600/40 rounded-xl p-2.5 text-xs text-amber-200 flex flex-col gap-1.5">
+          <div className="flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-[11px] leading-tight">
+              <span>{errorMessage}</span>
+              <p className="text-slate-400 text-[10px] mt-0.5">
+                Desktop/laptop Wi-Fi location provides coarse accuracy (±50km).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1 border-t border-amber-800/40">
+            {accuracyThreshold < 100000 ? (
+              <button
+                onClick={() => setAccuracyThreshold(100000)}
+                className="text-[10px] font-semibold text-amber-300 hover:text-white underline"
+              >
+                Allow Desktop Location (Relax Threshold)
+              </button>
+            ) : (
+              <span className="text-[10px] text-emerald-400">Desktop threshold relaxed</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Simulation Helper */}
+      <div className="flex items-center justify-between bg-slate-800/50 rounded-xl px-3 py-1.5 border border-slate-800 text-[11px]">
+        <span className="text-slate-400 flex items-center gap-1">
+          <Compass className="w-3 h-3 text-cyan-400" /> Desktop Simulation
+        </span>
+        <button
+          onClick={handleSimulateStep}
+          disabled={simulating || state !== 'RECORDING'}
+          className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition"
+        >
+          {simulating ? 'Adding step...' : '+ Simulate GPS Step'}
+        </button>
       </div>
 
       {/* Action Buttons */}

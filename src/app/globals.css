@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+:root {
+  --background: #090d16;
+  --foreground: #f8fafc;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* Custom map canvas container */
+.maplibre-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Smooth range input styling */
+input[type="range"] {
+  accent-color: #ff4d4f;
+}

@@ -37,7 +37,14 @@ export function ReplayControls({
   onRestart,
   onOpenExport,
 }: ReplayControlsProps) {
-  const speeds: ReplaySpeed[] = [1, 2, 5, 10];
+  const speeds: ReplaySpeed[] = [0.1, 0.25, 0.5, 1, 2, 5, 10];
+
+  const formatSpeedLabel = (s: ReplaySpeed) => {
+    if (s === 0.1) return '.10×';
+    if (s === 0.25) return '.25×';
+    if (s === 0.5) return '.5×';
+    return `${s}×`;
+  };
 
   // Keyboard shortcut listener
   useEffect(() => {
@@ -127,18 +134,18 @@ export function ReplayControls({
           </button>
 
           {/* Speed Toggles */}
-          <div className="flex items-center bg-slate-800/80 rounded-xl p-0.5 sm:p-1 gap-0.5">
+          <div className="flex items-center bg-slate-800/80 rounded-xl p-0.5 sm:p-1 gap-0.5 max-w-[135px] sm:max-w-none overflow-x-auto">
             {speeds.map((s) => (
               <button
                 key={s}
                 onClick={() => onChangeSpeed(s)}
-                className={`px-1.5 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-lg transition active:scale-95 ${
+                className={`px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-lg transition active:scale-95 whitespace-nowrap flex-shrink-0 ${
                   speed === s
                     ? 'bg-rose-500 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {s}×
+                {formatSpeedLabel(s)}
               </button>
             ))}
           </div>

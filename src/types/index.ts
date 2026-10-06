@@ -99,7 +99,7 @@ export type VehicleConfig = {
   modes: TravelMode[];
 };
 
-export type ReplaySpeed = 1 | 2 | 5 | 10;
+export type ReplaySpeed = 0.1 | 0.25 | 0.5 | 1 | 2 | 5 | 10;
 
 export type ApiResponse<T> = {
   success: boolean;

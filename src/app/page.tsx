@@ -365,6 +365,7 @@ export default function Home() {
             onSelectMapStyle={setMapStyle}
             onSelectRouteStyle={setRouteStyle}
             onSelectVehicle={setVehicle}
+            onClose={() => setShowStylePicker(false)}
           />
         </div>
       )}

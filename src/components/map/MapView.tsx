@@ -6,10 +6,11 @@ import {
   NavigationControl,
   AttributionControl,
   GeoJSONSource,
+  Marker,
   setWorkerUrl,
 } from 'maplibre-gl';
 import { CameraMode, GPSPoint, MapStyleId, RouteStyleId, VehicleType } from '@/types';
-import { MAP_STYLES, ROUTE_STYLES } from '@/lib/maps/styles';
+import { MAP_STYLES, ROUTE_STYLES, VEHICLE_CONFIGS } from '@/lib/maps/styles';
 
 if (typeof window !== 'undefined') {
   setWorkerUrl('/maplibre-gl-worker.mjs');
@@ -29,6 +30,7 @@ interface MapViewProps {
 export function MapView({
   mapStyle,
   routeStyle,
+  vehicle,
   cameraMode,
   drawnGeometry,
   fullTrack,
@@ -38,52 +40,43 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const isMapLoadedRef = useRef(false);
+  const vehicleMarkerRef = useRef<Marker | null>(null);
+
+  // Keep references to latest state for style reloading
+  const routeStyleRef = useRef(routeStyle);
+  const drawnGeometryRef = useRef(drawnGeometry);
+  const fullTrackRef = useRef(fullTrack);
+
+  useEffect(() => {
+    routeStyleRef.current = routeStyle;
+    drawnGeometryRef.current = drawnGeometry;
+    fullTrackRef.current = fullTrack;
+  }, [routeStyle, drawnGeometry, fullTrack]);
+
   const onMapLoadedRef = useRef(onMapLoaded);
   useEffect(() => {
     onMapLoadedRef.current = onMapLoaded;
   }, [onMapLoaded]);
 
-  const initMapStyleRef = useRef(mapStyle);
-  const initRouteStyleRef = useRef(routeStyle);
+  // Helper to attach custom GeoJSON sources and layers cleanly
+  const setupLayers = (map: MapLibreMap) => {
+    const curStyle = ROUTE_STYLES[routeStyleRef.current] || ROUTE_STYLES.classic;
 
-  // Initialize MapLibre
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    // 1. Background full track
+    if (!map.getSource('full-route-source')) {
+      const fullCoords = fullTrackRef.current
+        ? fullTrackRef.current.map((p) => [p.longitude, p.latitude])
+        : [];
 
-    const styleConfig = MAP_STYLES[initMapStyleRef.current] || MAP_STYLES.light;
-
-    const map = new MapLibreMap({
-      container: containerRef.current,
-      style: styleConfig.styleUrl,
-      center: [-122.4194, 37.7749], // SF default
-      zoom: 13,
-      pitch: 40,
-      canvasContextAttributes: {
-        preserveDrawingBuffer: true,
-      },
-      attributionControl: false,
-    });
-
-    map.addControl(
-      new AttributionControl({
-        compact: true,
-        customAttribution: '© OpenFreeMap • © OpenStreetMap contributors',
-      }),
-      'bottom-right'
-    );
-
-    map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
-
-    map.on('load', () => {
-      isMapLoadedRef.current = true;
-      mapRef.current = map;
-
-      // 1. Full faint background track source
       map.addSource('full-route-source', {
         type: 'geojson',
         data: {
-          type: 'FeatureCollection',
-          features: [],
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: fullCoords,
+          },
         },
       });
 
@@ -98,18 +91,27 @@ export function MapView({
         paint: {
           'line-color': '#94a3b8',
           'line-width': 3,
-          'line-opacity': 0.35,
+          'line-opacity': 0.3,
           'line-dasharray': [2, 2],
         },
       });
+    }
 
-      // 2. Animated drawn route source & layers
+    // 2. Animated drawn route
+    if (!map.getSource('drawn-route-source')) {
       map.addSource('drawn-route-source', {
         type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: [],
-        },
+        lineMetrics: true, // Enables smooth line gradients
+        data: drawnGeometryRef.current
+          ? {
+              type: 'Feature',
+              properties: {},
+              geometry: drawnGeometryRef.current,
+            }
+          : {
+              type: 'FeatureCollection',
+              features: [],
+            },
       });
 
       // Glow layer for neon style
@@ -122,9 +124,9 @@ export function MapView({
           'line-cap': 'round',
         },
         paint: {
-          'line-color': ROUTE_STYLES[initRouteStyleRef.current].secondaryColor || '#ff4d4f66',
+          'line-color': curStyle.secondaryColor || '#ff4d4f66',
           'line-width': 14,
-          'line-opacity': initRouteStyleRef.current === 'neon' ? 0.7 : 0,
+          'line-opacity': curStyle.glow ? 0.75 : 0,
           'line-blur': 6,
         },
       });
@@ -139,57 +141,94 @@ export function MapView({
           'line-cap': 'round',
         },
         paint: {
-          'line-color': ROUTE_STYLES[initRouteStyleRef.current].color,
-          'line-width': ROUTE_STYLES[initRouteStyleRef.current].width,
-          'line-dasharray': initRouteStyleRef.current === 'dashed' ? [2, 2] : [1, 0],
+          'line-color': curStyle.color,
+          'line-width': curStyle.width,
+          'line-dasharray': curStyle.dashed ? [2, 2] : [1, 0],
         },
       });
+    }
+  };
 
-      // 3. Vehicle source & layer
-      map.addSource('vehicle-source', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: [],
-        },
-      });
+  // Store initial values to safely initialize MapLibre once
+  const initialMapStyleRef = useRef(mapStyle);
+  const initialVehicleRef = useRef(vehicle);
 
-      // Vehicle outer pulse circle
-      map.addLayer({
-        id: 'vehicle-pulse-layer',
-        type: 'circle',
-        source: 'vehicle-source',
-        paint: {
-          'circle-radius': 16,
-          'circle-color': '#ff4d4f',
-          'circle-opacity': 0.25,
-        },
-      });
+  // Initialize MapLibre
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
 
-      // Vehicle center marker
-      map.addLayer({
-        id: 'vehicle-marker-layer',
-        type: 'circle',
-        source: 'vehicle-source',
-        paint: {
-          'circle-radius': 8,
-          'circle-color': '#ffffff',
-          'circle-stroke-color': '#ff4d4f',
-          'circle-stroke-width': 3,
-        },
-      });
+    const styleConfig = MAP_STYLES[initialMapStyleRef.current] || MAP_STYLES.light;
+
+    const map = new MapLibreMap({
+      container: containerRef.current,
+      style: styleConfig.styleUrl,
+      center: [-122.4194, 37.7749], // SF default
+      zoom: 13,
+      pitch: 40,
+      canvasContextAttributes: {
+        preserveDrawingBuffer: true, // Required for canvas PNG & video export
+      },
+      attributionControl: false,
+    });
+
+    map.addControl(
+      new AttributionControl({
+        compact: true,
+        customAttribution: '© OpenFreeMap • © OpenStreetMap contributors',
+      }),
+      'bottom-right'
+    );
+
+    map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+
+    // Create interactive animated vehicle marker DOM node
+    const vehicleEl = document.createElement('div');
+    vehicleEl.className = 'geodraw-vehicle-marker flex items-center justify-center';
+    vehicleEl.style.width = '38px';
+    vehicleEl.style.height = '38px';
+    vehicleEl.style.borderRadius = '50%';
+    vehicleEl.style.backgroundColor = 'rgba(15, 23, 42, 0.9)';
+    vehicleEl.style.border = '2.5px solid #ff4d4f';
+    vehicleEl.style.boxShadow = '0 4px 14px rgba(255, 77, 79, 0.4)';
+    vehicleEl.style.fontSize = '20px';
+    vehicleEl.style.cursor = 'pointer';
+    vehicleEl.style.transition = 'transform 0.1s linear';
+    vehicleEl.innerHTML = VEHICLE_CONFIGS[initialVehicleRef.current]?.icon || '🚶';
+
+    const vehicleMarker = new Marker({
+      element: vehicleEl,
+      anchor: 'center',
+    });
+
+    vehicleMarkerRef.current = vehicleMarker;
+
+    map.on('load', () => {
+      isMapLoadedRef.current = true;
+      mapRef.current = map;
+
+      setupLayers(map);
+      vehicleMarker.addTo(map);
 
       if (onMapLoadedRef.current) onMapLoadedRef.current(map);
     });
 
+    // Re-attach custom sources & layers whenever map theme changes
+    map.on('style.load', () => {
+      if (isMapLoadedRef.current) {
+        setupLayers(map);
+      }
+    });
+
     return () => {
+      vehicleMarker.remove();
       map.remove();
       mapRef.current = null;
       isMapLoadedRef.current = false;
+      vehicleMarkerRef.current = null;
     };
   }, []);
 
-  // Update Map Style URL when user changes style
+  // Update Map Theme
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoadedRef.current) return;
@@ -199,7 +238,7 @@ export function MapView({
     }
   }, [mapStyle]);
 
-  // Update Route Style colors / widths
+  // Update Route Style (colors / glow / dash)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoadedRef.current) return;
@@ -231,25 +270,35 @@ export function MapView({
     }
   }, [routeStyle]);
 
-  // Update Full Track background preview
+  // Update Vehicle Avatar Icon
+  useEffect(() => {
+    if (vehicleMarkerRef.current) {
+      const el = vehicleMarkerRef.current.getElement();
+      if (el) {
+        el.innerHTML = VEHICLE_CONFIGS[vehicle]?.icon || '🚶';
+      }
+    }
+  }, [vehicle]);
+
+  // Update Full Track background path
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoadedRef.current || !fullTrack || fullTrack.length < 2) return;
 
     const source = map.getSource('full-route-source') as GeoJSONSource;
-    if (!source) return;
+    if (source) {
+      const lineCoords = fullTrack.map((p) => [p.longitude, p.latitude]);
+      source.setData({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: lineCoords,
+        },
+      });
+    }
 
-    const lineCoords = fullTrack.map((p) => [p.longitude, p.latitude]);
-    source.setData({
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: lineCoords,
-      },
-    });
-
-    // Fit bounds on first track load if overview
+    // Fit overview bounds on track load
     if (cameraMode === 'overview') {
       const lats = fullTrack.map((p) => p.latitude);
       const lngs = fullTrack.map((p) => p.longitude);
@@ -258,7 +307,7 @@ export function MapView({
           [Math.min(...lngs), Math.min(...lats)],
           [Math.max(...lngs), Math.max(...lats)],
         ],
-        { padding: 80, duration: 1000 }
+        { padding: 80, duration: 800 }
       );
     }
   }, [fullTrack, cameraMode]);
@@ -283,27 +332,19 @@ export function MapView({
     });
   }, [drawnGeometry]);
 
-  // Update Vehicle position & follow camera
+  // Update Vehicle position & Follow Camera
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isMapLoadedRef.current) return;
+    if (!map || !isMapLoadedRef.current || !currentVehiclePos) return;
 
-    const source = map.getSource('vehicle-source') as GeoJSONSource;
-    if (!source) return;
-
-    if (!currentVehiclePos) {
-      source.setData({ type: 'FeatureCollection', features: [] });
-      return;
+    if (vehicleMarkerRef.current) {
+      vehicleMarkerRef.current.setLngLat([currentVehiclePos.lng, currentVehiclePos.lat]);
+      const el = vehicleMarkerRef.current.getElement();
+      if (el) {
+        // Rotate vehicle icon smoothly with heading
+        el.style.transform = `rotate(${currentVehiclePos.heading || 0}deg)`;
+      }
     }
-
-    source.setData({
-      type: 'Feature',
-      properties: { heading: currentVehiclePos.heading },
-      geometry: {
-        type: 'Point',
-        coordinates: [currentVehiclePos.lng, currentVehiclePos.lat],
-      },
-    });
 
     // Follow Camera mode
     if (cameraMode === 'follow') {

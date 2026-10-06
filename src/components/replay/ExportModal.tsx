@@ -2,9 +2,22 @@
 
 import React, { useState } from 'react';
 import { Journey } from '@/types';
-import { generateJourneyCard, checkVideoSupport } from '@/features/export/canvasExport';
+import {
+  generateJourneyCard,
+  generateReplayVideo,
+  checkVideoSupport,
+} from '@/features/export/canvasExport';
 import { createPublicJourneyPayload } from '@/features/sharing/privacy';
-import { X, Image as ImageIcon, Video, Share2, Download, Check, Sparkles } from 'lucide-react';
+import {
+  X,
+  Image as ImageIcon,
+  Video,
+  Share2,
+  Download,
+  Check,
+  Sparkles,
+  Loader2,
+} from 'lucide-react';
 
 interface ExportModalProps {
   journey: Journey;
@@ -15,6 +28,11 @@ interface ExportModalProps {
 export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps) {
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [cardDownloaded, setCardDownloaded] = useState(false);
+
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoDownloaded, setVideoDownloaded] = useState(false);
+
   const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
 
@@ -55,6 +73,37 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
     }
   };
 
+  // Export 9:16 Replay Video Reel
+  const handleGenerateVideo = async () => {
+    if (!videoSupport.supported) return;
+    try {
+      setIsGeneratingVideo(true);
+      setVideoProgress(0);
+
+      const blob = await generateReplayVideo(journey, (p) => {
+        setVideoProgress(Math.round(p * 100));
+      });
+
+      const videoUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `${journey.title.toLowerCase().replace(/\s+/g, '-')}-reel.webm`;
+      link.href = videoUrl;
+      link.click();
+
+      setVideoDownloaded(true);
+      setTimeout(() => {
+        setVideoDownloaded(false);
+        URL.revokeObjectURL(videoUrl);
+      }, 5000);
+    } catch (err) {
+      console.error('Failed to render video reel:', err);
+      alert('Video export could not be completed. You can export a Journey Card instead.');
+    } finally {
+      setIsGeneratingVideo(false);
+      setVideoProgress(0);
+    }
+  };
+
   // Generate Unlisted Share Link
   const handleGenerateShareLink = () => {
     const publicPayload = createPublicJourneyPayload(journey, 200);
@@ -68,10 +117,16 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="relative w-full max-w-lg bg-slate-900 border-t sm:border border-slate-800 rounded-t-[32px] sm:rounded-3xl shadow-2xl p-5 sm:p-6 text-white flex flex-col gap-4 sm:gap-6 max-h-[90dvh] overflow-y-auto pb-safe">
         {/* Mobile drag handle */}
         <div className="w-12 h-1 bg-slate-700/80 rounded-full mx-auto sm:hidden -mt-1 mb-0.5" />
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">
@@ -97,13 +152,17 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
           <button
             onClick={handleGenerateCard}
             disabled={isGeneratingCard}
-            className="flex flex-col items-start p-4 rounded-2xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800/80 hover:border-rose-500/50 transition group text-left"
+            className="flex flex-col items-start p-4 rounded-2xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800/80 hover:border-rose-500/50 transition group text-left active:scale-[0.98]"
           >
             <div className="p-2.5 bg-rose-500/10 text-rose-400 rounded-xl mb-3 group-hover:scale-105 transition">
-              <ImageIcon className="w-5 h-5" />
+              {isGeneratingCard ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <ImageIcon className="w-5 h-5" />
+              )}
             </div>
             <span className="font-semibold text-sm mb-1">
-              {cardDownloaded ? 'Card Downloaded!' : 'Journey Card (PNG)'}
+              {cardDownloaded ? 'Card Downloaded!' : isGeneratingCard ? 'Generating Card...' : 'Journey Card (PNG)'}
             </span>
             <span className="text-xs text-slate-400">
               High-res poster with route silhouette & statistics
@@ -113,7 +172,7 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
           {/* 2. Map Snapshot */}
           <button
             onClick={handleExportMapScreenshot}
-            className="flex flex-col items-start p-4 rounded-2xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800/80 hover:border-amber-500/50 transition group text-left"
+            className="flex flex-col items-start p-4 rounded-2xl border border-slate-800 bg-slate-800/40 hover:bg-slate-800/80 hover:border-amber-500/50 transition group text-left active:scale-[0.98]"
           >
             <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl mb-3 group-hover:scale-105 transition">
               <Download className="w-5 h-5" />
@@ -124,24 +183,60 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
             </span>
           </button>
 
-          {/* 3. Replay Video */}
-          <div className="flex flex-col items-start p-4 rounded-2xl border border-slate-800 bg-slate-800/40 relative opacity-90 sm:col-span-2">
+          {/* 3. Replay Video Reel (Fully Interactive Client-Side Rendering) */}
+          <button
+            onClick={handleGenerateVideo}
+            disabled={!videoSupport.supported || isGeneratingVideo}
+            className={`flex flex-col items-start p-4 rounded-2xl border transition group text-left sm:col-span-2 active:scale-[0.98] ${
+              videoSupport.supported
+                ? 'border-slate-800 bg-slate-800/40 hover:bg-slate-800/80 hover:border-cyan-500/50'
+                : 'border-slate-800/40 bg-slate-800/20 opacity-60 cursor-not-allowed'
+            }`}
+          >
             <div className="flex items-center justify-between w-full mb-2">
               <div className="flex items-center gap-2">
-                <div className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl">
-                  <Video className="w-5 h-5" />
+                <div className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl group-hover:scale-105 transition">
+                  {isGeneratingVideo ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+                  ) : (
+                    <Video className="w-5 h-5" />
+                  )}
                 </div>
                 <div>
-                  <span className="font-semibold text-sm block">9:16 Video Reel</span>
+                  <span className="font-semibold text-sm block">
+                    {videoDownloaded
+                      ? 'Video Reel Downloaded!'
+                      : isGeneratingVideo
+                      ? `Rendering Reel: ${videoProgress}%`
+                      : '9:16 Video Reel (TikTok / Reels)'}
+                  </span>
                   <span className="text-xs text-slate-400">
                     {videoSupport.supported
-                      ? 'Format: WebM / MP4 via Canvas Stream'
+                      ? isGeneratingVideo
+                        ? 'Capturing canvas frames in real-time...'
+                        : 'Render 3-second animated replay video directly in your browser'
                       : 'Video recording unsupported on this browser'}
                   </span>
                 </div>
               </div>
+
+              {isGeneratingVideo && (
+                <span className="text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-lg">
+                  {videoProgress}%
+                </span>
+              )}
             </div>
-          </div>
+
+            {/* Progress bar when rendering */}
+            {isGeneratingVideo && (
+              <div className="w-full bg-slate-700/60 rounded-full h-1.5 mt-2 overflow-hidden">
+                <div
+                  className="bg-cyan-400 h-full rounded-full transition-all duration-100 ease-out"
+                  style={{ width: `${videoProgress}%` }}
+                />
+              </div>
+            )}
+          </button>
         </div>
 
         {/* Share Link Generation (with Privacy Notice) */}
@@ -172,7 +267,7 @@ export function ExportModal({ journey, getMapCanvas, onClose }: ExportModalProps
                   <Check className="w-3.5 h-3.5" /> Copied!
                 </>
               ) : (
-                'Copy Link'
+                'Create Link'
               )}
             </button>
           </div>

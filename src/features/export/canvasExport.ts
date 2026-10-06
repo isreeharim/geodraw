@@ -236,3 +236,184 @@ export function checkVideoSupport(): {
 
   return { supported: false, mimeType: null };
 }
+
+/**
+ * Generates an animated 9:16 client-side video reel of the journey replay.
+ */
+export async function generateReplayVideo(
+  journey: Journey,
+  onProgress?: (progress: number) => void
+): Promise<Blob> {
+  const width = 720;
+  const height = 1280; // 9:16 portrait video
+  const fps = 30;
+  const totalFrames = 90; // 3 seconds animated reel
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+  const videoSupport = checkVideoSupport();
+  if (!videoSupport.supported || !videoSupport.mimeType) {
+    throw new Error('Video recording unsupported on this browser');
+  }
+
+  // Setup stream & MediaRecorder
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, {
+    mimeType: videoSupport.mimeType,
+    videoBitsPerSecond: 2_500_000,
+  });
+
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  recorder.start();
+
+  // Route bounds calculation
+  const points = journey.raw_track;
+  const lats = points.map((p) => p.latitude);
+  const lngs = points.map((p) => p.longitude);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latSpan = Math.max(0.0001, maxLat - minLat);
+  const lngSpan = Math.max(0.0001, maxLng - minLng);
+
+  const routeAreaWidth = width - 120;
+  const routeAreaHeight = height - 420;
+  const padding = 50;
+  const drawW = routeAreaWidth - padding * 2;
+  const drawH = routeAreaHeight - padding * 2;
+  const scale = Math.min(drawW / lngSpan, drawH / latSpan);
+  const offsetX = 60 + padding + (drawW - lngSpan * scale) / 2;
+  const offsetY = 260 + padding + (drawH - latSpan * scale) / 2;
+
+  // Frame rendering loop
+  for (let frame = 0; frame <= totalFrames; frame++) {
+    const progress = frame / totalFrames;
+    if (onProgress) onProgress(progress);
+
+    // 1. Background
+    const bg = ctx.createLinearGradient(0, 0, 0, height);
+    bg.addColorStop(0, '#090d16');
+    bg.addColorStop(1, '#020617');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    // 2. Top Header Card
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.roundRect?.(40, 50, width - 80, 160, 24);
+    ctx.fill();
+
+    // Brand Pill
+    ctx.fillStyle = '#ff4d4f';
+    ctx.beginPath();
+    ctx.arc(70, 90, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#ff4d4f';
+    ctx.fillText('GEODRAW REEL', 85, 96);
+
+    // Title
+    ctx.font = 'bold 30px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#f8fafc';
+    const displayTitle = journey.title.length > 22 ? journey.title.substring(0, 20) + '...' : journey.title;
+    ctx.fillText(displayTitle, 70, 140);
+
+    // Dynamic stats
+    const currentDistKm = ((journey.distance_m * progress) / 1000).toFixed(2);
+    ctx.font = '600 20px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText(`${currentDistKm} km`, 70, 180);
+
+    const totalDurationMins = Math.round(journey.duration_s / 60);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '500 16px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(`• ${totalDurationMins} min`, 180, 180);
+
+    // 3. Map Route container
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.roundRect?.(40, 240, width - 80, routeAreaHeight + 40, 24);
+    ctx.fill();
+
+    // 4. Draw Route line up to progress
+    const pointsToDrawCount = Math.max(2, Math.floor(points.length * progress));
+    const subPoints = points.slice(0, pointsToDrawCount);
+
+    ctx.save();
+    // Glow line
+    ctx.strokeStyle = 'rgba(255, 77, 79, 0.4)';
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    subPoints.forEach((pt, i) => {
+      const x = offsetX + (pt.longitude - minLng) * scale;
+      const y = offsetY + (maxLat - pt.latitude) * scale;
+      if (i === 0 || pt.segment !== subPoints[i - 1].segment) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Core line
+    ctx.strokeStyle = '#ff4d4f';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    subPoints.forEach((pt, i) => {
+      const x = offsetX + (pt.longitude - minLng) * scale;
+      const y = offsetY + (maxLat - pt.latitude) * scale;
+      if (i === 0 || pt.segment !== subPoints[i - 1].segment) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Start Pin
+    const startPt = points[0];
+    const startX = offsetX + (startPt.longitude - minLng) * scale;
+    const startY = offsetY + (maxLat - startPt.latitude) * scale;
+    ctx.fillStyle = '#10b981';
+    ctx.beginPath();
+    ctx.arc(startX, startY, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Current moving vehicle head
+    const curPt = subPoints[subPoints.length - 1];
+    const curX = offsetX + (curPt.longitude - minLng) * scale;
+    const curY = offsetY + (maxLat - curPt.latitude) * scale;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(curX, curY, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ff4d4f';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // 5. Footer Watermark
+    ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center';
+    ctx.fillText('Created with GeoDraw • OpenStreetMap data', width / 2, height - 40);
+
+    // Frame spacing
+    await new Promise((r) => setTimeout(r, 1000 / fps));
+  }
+
+  return new Promise((resolve) => {
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: videoSupport.mimeType || 'video/webm' });
+      resolve(blob);
+    };
+    recorder.stop();
+  });
+}
